@@ -1,4 +1,4 @@
-"""Echoframe (Streamlit edition): upload a photo, find out what environment it shows.
+"""PostCard (Streamlit edition): upload a photo, find out what environment it shows.
 
 Run:  pip install -r requirements.txt
       export ANTHROPIC_API_KEY=...     # strongly recommended: much more accurate
@@ -166,8 +166,8 @@ def draw_pins(img, feats):
 
 
 # ------------------------------------------------------------ 4. the app
-st.set_page_config(page_title="Echoframe", page_icon="🎧", layout="wide")
-st.title("Echoframe")
+st.set_page_config(page_title="PostCard", page_icon="🎧", layout="wide")
+st.title("PostCard")
 st.write("Drop in a photo. See where it is.")
 
 with st.sidebar:
