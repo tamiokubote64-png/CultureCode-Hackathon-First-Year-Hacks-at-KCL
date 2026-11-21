@@ -193,7 +193,6 @@ analyze.addEventListener('click', async () => {
   const id = ++requestId;
   controller?.abort();
   controller = new AbortController();
-  analyzing = true;
   analyze.disabled = true;
   analyze.textContent = 'Analyzing…';
   resetAnalysis();
