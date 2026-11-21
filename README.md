@@ -1,3 +1,45 @@
+# Sonic Postcodes — Offline Photo to Music
+
+**No vision API, API key, FastAPI server, or cloud inference is required by default.** The browser extracts visual features from an uploaded photograph and sends five approximate scores to the existing Tone.js soundtrack engine.
+
+## Run the no-key version (Windows PowerShell)
+
+Open a terminal in the repository root:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open the Vite **Local** address (normally http://127.0.0.1:5173/), upload a JPG, PNG or WebP, click **Analyze photograph**, then **Play composition**. Select **Offline · on-device (no API key)** (selected automatically). Only the frontend terminal is required.
+
+**Important limitations:** brightness, colour warmth, texture density, visual busyness (energy proxy), and vertical-edge scale (grandeur proxy) are measured from pixels. This is **not semantic AI vision**. It cannot reliably recognise landmarks, buildings, crowds, motion, geography, or weather. It should not be represented as doing so. No photo is sent to any server in offline mode. Vite can be built with `npm run build`, and static assets can be hosted without a backend after build; downloading the app and packages initially requires internet.
+
+## Optional original AI-powered mode
+
+Choose **OpenAI vision API (optional, requires FastAPI)** in the dropdown. Start the existing Python backend separately using `backend/README.md` and configure `backend/.env` with your own key. This retains the original AI-generated scene summaries if needed, but is not necessary for music playback.
+
+## Architecture
+
+- `frontend/src/analysis/local.ts`: Canvas-based on-device feature measurements; returns the existing `VisualAnalysis` schema.
+- `frontend/src/main.ts`: photo upload, mode dropdown, local/remote analysis, score explanations, and player controls.
+- `frontend/src/audio/compose.ts` and `engine.ts`: unchanged deterministic soundtrack and Tone.js playback.
+- `backend/`: optional, untouched Python vision API.
+
+## Verify
+
+```powershell
+cd frontend
+npm ci
+npm run build
+npm run dev
+```
+
+Try a bright and a dim photo: the brightness score should differ. Play, Stop and Replay should work. Try analysis with the backend stopped: **Offline** mode should still work. The local heuristic metrics are subjective musical controls rather than calibrated physical measurements.
+
+---
+
 # Sonic Postcodes — Photo to Music
 
 Upload a city or street image, receive five grounded visual scores from a Python FastAPI vision service, and hear a 20–30 second composition generated locally in the browser with Tone.js.
