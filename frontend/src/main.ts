@@ -67,7 +67,6 @@ const stop = document.querySelector<HTMLButtonElement>('#stop')!;
 const status = document.querySelector<HTMLElement>('#status')!;
 
 let selected: File | null = null;
-let analyzing = false;
 let objectUrl: string | null = null;
 let currentAnalysis: VisualAnalysis | null = null;
 let controller: AbortController | null = null;
@@ -93,7 +92,6 @@ function selectFile(file: File | null): void {
   requestId++;
   controller?.abort();
   controller = null;
-  analyzing = false;
   analyze.disabled = false;
   analyze.textContent = 'Analyze photograph →';
   resetAnalysis();
@@ -224,7 +222,6 @@ analyze.addEventListener('click', async () => {
   } finally {
     if (id === requestId) {
       controller = null;
-      analyzing = false;
       analyze.disabled = !selected;
       analyze.textContent = 'Analyze photograph →';
     }
