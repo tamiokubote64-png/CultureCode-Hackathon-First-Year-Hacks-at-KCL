@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Audio harness</title>
+    <style>
+      body { font: 16px system-ui; background: #0b0b10; color: #eee; padding: 2rem; }
+      button { font: inherit; padding: .6rem 1.2rem; margin-right: .5rem; }
+      pre { white-space: pre-wrap; max-width: 60ch; color: #aab; }
+    </style>
+  </head>
+  <body>
+    <h1>Sonic Postcodes: audio harness</h1>
+    <button id="nyc">Play NYC (high grandeur / energy)</button>
+    <button id="soho">Play SoHo (quiet)</button>
+    <button id="stop">Stop</button>
+    <pre id="out"></pre>
+    <script type="module" src="/src/audio/harness.ts"></script>
+  </body>
+</html>
