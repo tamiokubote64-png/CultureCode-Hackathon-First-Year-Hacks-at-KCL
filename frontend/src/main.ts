@@ -1,4 +1,5 @@
 import './style.css';
+import { analyzeImageLocally } from './analysis/local';
 import type { VisualAnalysis } from './types/analysis';
 import { getMusicDescription, isPlaying, onPlaybackEnded, playFromAnalysis, stopPlayback } from './audio/engine';
 
@@ -18,6 +19,7 @@ root.innerHTML = `
       <h1>Hear the world<br/><em>around you.</em></h1>
       <p>Upload a city or street photograph. Our visual intelligence reads its atmosphere, then transforms five visual qualities into a one-of-a-kind musical composition.</p>
     </section>
+    <div class="analysis-mode"><label for="mode">Analysis method</label><select id="mode"><option value="local" selected>Offline · on-device (no API key)</option><option value="api">OpenAI vision API (optional, requires FastAPI)</option></select><small id="mode-help">Local image analysis estimates visual characteristics from pixels. No photo is uploaded.</small></div>
     <section class="workspace">
       <div class="card upload-card">
         <div class="section-heading"><span class="step">01</span><h2>Your photograph</h2></div>
@@ -49,6 +51,8 @@ root.innerHTML = `
 `;
 
 const photo = document.querySelector<HTMLInputElement>('#photo')!;
+const mode = document.querySelector<HTMLSelectElement>('#mode')!;
+const modeHelp = document.querySelector<HTMLElement>('#mode-help')!;
 const dropzone = document.querySelector<HTMLLabelElement>('#dropzone')!;
 const preview = document.querySelector<HTMLImageElement>('#preview')!;
 const placeholder = document.querySelector<HTMLElement>('#placeholder')!;
@@ -63,6 +67,7 @@ const stop = document.querySelector<HTMLButtonElement>('#stop')!;
 const status = document.querySelector<HTMLElement>('#status')!;
 
 let selected: File | null = null;
+let analyzing = false;
 let objectUrl: string | null = null;
 let currentAnalysis: VisualAnalysis | null = null;
 let controller: AbortController | null = null;
@@ -88,6 +93,7 @@ function selectFile(file: File | null): void {
   requestId++;
   controller?.abort();
   controller = null;
+  analyzing = false;
   analyze.disabled = false;
   analyze.textContent = 'Analyze photograph →';
   resetAnalysis();
@@ -161,6 +167,18 @@ function renderAnalysis(data: VisualAnalysis): void {
   message('Analysis complete. Press Play to hear your soundtrack.');
 }
 
+mode.addEventListener('change', () => {
+  requestId++;
+  controller?.abort();
+  controller = null;
+  resetAnalysis();
+  analyze.disabled = !selected;
+  analyze.textContent = 'Analyze photograph →';
+  message('');
+  modeHelp.textContent = mode.value === 'local'
+    ? 'Local image analysis estimates visual characteristics from pixels. No photo is uploaded.'
+    : 'OpenAI vision needs the FastAPI backend running on port 8000 and a valid API key.';
+});
 photo.addEventListener('change', () => selectFile(photo.files?.[0] ?? null));
 clear.addEventListener('click', () => selectFile(null));
 dropzone.addEventListener('dragover', event => { event.preventDefault(); dropzone.classList.add('dragging'); });
@@ -177,28 +195,36 @@ analyze.addEventListener('click', async () => {
   const id = ++requestId;
   controller?.abort();
   controller = new AbortController();
+  analyzing = true;
   analyze.disabled = true;
   analyze.textContent = 'Analyzing…';
   resetAnalysis();
-  message('Analyzing your photograph. This may take a moment.');
-  const form = new FormData();
-  form.append('file', file, file.name);
+  message(mode.value === 'local' ? 'Analyzing pixels locally. Your photo stays in this browser.' : 'Contacting the vision API…');
   try {
-    const response = await fetch('/api/analyze', { method: 'POST', body: form, signal: controller.signal });
-    const payload: unknown = await response.json();
-    if (id !== requestId) return;
-    if (!response.ok) {
-      const body = payload as { detail?: unknown } | null;
-      throw new Error(typeof body?.detail === 'string' ? body.detail : 'Analysis failed (HTTP ' + response.status + ').');
+    let payload: unknown;
+    if (mode.value === 'local') {
+      payload = await analyzeImageLocally(file);
+    } else {
+      const form = new FormData();
+      form.append('file', file, file.name);
+      const response = await fetch('/api/analyze', { method: 'POST', body: form, signal: controller.signal });
+      payload = await response.json();
+      if (!response.ok) {
+        const body = payload as { detail?: unknown } | null;
+        throw new Error(typeof body?.detail === 'string' ? body.detail : 'Analysis failed (HTTP ' + response.status + ').');
+      }
     }
-    if (!isAnalysis(payload)) throw new Error('Backend response does not match the visual analysis contract.');
+    if (id !== requestId) return;
+    if (!isAnalysis(payload)) throw new Error('Analysis response did not match the visual score contract.');
     renderAnalysis(payload);
+    if (mode.value === 'local') message('Offline analysis complete (approximate visual estimates). Press Play to hear the soundtrack.');
   } catch (err) {
     if (id !== requestId || (err instanceof DOMException && err.name === 'AbortError')) return;
     message(err instanceof Error ? err.message : 'Could not analyze image. Check that the backend is running.', true);
   } finally {
     if (id === requestId) {
       controller = null;
+      analyzing = false;
       analyze.disabled = !selected;
       analyze.textContent = 'Analyze photograph →';
     }
