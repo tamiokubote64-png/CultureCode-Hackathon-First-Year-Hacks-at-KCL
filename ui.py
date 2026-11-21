@@ -1,14 +1,15 @@
-"""Echoframe (Streamlit edition): upload a photo, find out what environment it shows.
+"""Sonic Postcodes: Streamlit UI with FastAPI visual-analysis integration.
 
-Run:  pip install -r requirements.txt
-      export ANTHROPIC_API_KEY=...     # strongly recommended: much more accurate
-      streamlit run app.py
+Run from the repository root: python -m streamlit run ui.py
+Run the backend separately from backend/: python -m uvicorn app.main:app --reload --port 8000
+The original Echoframe environment explorer remains available as an optional mode.
 """
-import base64, colorsys, io, json, os, zlib
+import base64, colorsys, hashlib, io, json, os, zlib
 
 import numpy as np
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from ui_backend_client import BackendError, SCORE_NAMES, analyze_with_backend
 
 MODEL = "claude-sonnet-5-5"   # change if your account uses another model
 ENVS = ["City street", "Town or village", "Countryside", "Farmland", "Forest", "Mountains", "Coast or beach",
@@ -166,40 +167,119 @@ def draw_pins(img, feats):
 
 
 # ------------------------------------------------------------ 4. the app
-st.set_page_config(page_title="Echoframe", page_icon="🎧", layout="wide")
-st.title("Echoframe")
-st.write("Drop in a photo. See where it is.")
+st.set_page_config(page_title="Sonic Postcodes", page_icon="🎧", layout="wide")
+st.title("Sonic Postcodes")
+st.write("Upload a photograph to translate its visible atmosphere into musical parameters.")
 
 with st.sidebar:
-    key = os.environ.get("ANTHROPIC_API_KEY", "") or st.text_input("Anthropic API key", type="password",
-        help="Used to ask Claude what the photo shows. Without it the app falls back to a rough colour-based estimate.")
+    mode = st.radio(
+        "View",
+        ("Sonic Postcodes (FastAPI)", "Environment explorer (legacy)"),
+        help="Sonic Postcodes uses the shared Python backend. The legacy explorer has a separate analysis.",
+    )
+    api_url = os.environ.get("SONIC_API_URL", "http://127.0.0.1:8000").rstrip("/")
+    st.caption(f"Vision backend: {api_url}")
+    if mode == "Environment explorer (legacy)":
+        key = os.environ.get("ANTHROPIC_API_KEY", "") or st.text_input(
+            "Anthropic API key",
+            type="password",
+            help="Optional key for the original explorer. Without one, the explorer uses a rough colour-based estimate.",
+        )
 
-up = st.file_uploader("Choose a photo", type=["png", "jpg", "jpeg", "webp"])
-cols = st.columns(6)
-for col, (label, kind) in zip(cols, [("Sample city", "city"), ("Sample countryside", "country"), ("Sample coast", "coast")]):
-    if col.button(label, use_container_width=True): st.session_state.img = sample(kind)
-if up: st.session_state.img = up.getvalue()
+up = st.file_uploader("Choose a photograph", type=["png", "jpg", "jpeg", "webp"])
+if up is not None:
+    uploaded_bytes = up.getvalue()
+    fingerprint = hashlib.sha256(uploaded_bytes).hexdigest()
+    if st.session_state.get("upload_fingerprint") != fingerprint:
+        st.session_state.img = uploaded_bytes
+        st.session_state.image_filename = up.name
+        st.session_state.upload_fingerprint = fingerprint
+
+sample_cols = st.columns(3)
+for col, (label, kind) in zip(sample_cols, [
+    ("Sample city", "city"),
+    ("Sample countryside", "country"),
+    ("Sample coast", "coast"),
+]):
+    if col.button(label, use_container_width=True):
+        st.session_state.img = sample(kind)
+        st.session_state.image_filename = f"sample-{kind}.png"
+
 if "img" not in st.session_state:
-    st.info("Upload a photo or try a sample to begin."); st.stop()
+    st.info("Upload a photograph or choose a sample image to begin.")
+    st.stop()
 
-b = st.session_state.img
-res = get_result(b, key)
-if res.get("warn"): st.warning(res["warn"])
+image_bytes = st.session_state.img
+image_filename = st.session_state.get("image_filename", "photograph.png")
 
-left, right = st.columns([3, 2], gap="large")
-with left:
-    st.image(draw_pins(load(b), res["feats"]), use_container_width=True)
-with right:
-    st.caption("Identified by Claude" if res["src"] == "ai" else "On-device estimate")
-    st.header(res["env"])
-    st.write(res["why"])
-    meta = ", ".join(x for x in [res["time"], res["weather"]] if x)
-    if meta: st.caption(meta)
-    st.subheader("What it found")
-    for x in res["feats"]:
-        where = "left" if x["x"] < .34 else "right" if x["x"] > .66 else "centre"
-        st.markdown(f"**{x['label']}**  \n{where}" + (f", {x['pct']}% of the frame" if x["pct"] else ""))
-    if res["src"] != "ai":
-        st.caption("This estimate only reads colours and shapes, so it can get a scene wrong. Add an API key for a more reliable answer.")
-        
-        
+if mode == "Sonic Postcodes (FastAPI)":
+    left, right = st.columns([3, 2], gap="large")
+    with left:
+        st.image(load(image_bytes), use_container_width=True)
+    with right:
+        st.subheader("AI visual interpretation")
+        st.caption("Scores and explanations are generated by your FastAPI backend, not by this Streamlit file.")
+        if st.button("Analyse photograph", type="primary", use_container_width=True):
+            try:
+                with st.spinner("Asking your vision backend to analyse the photograph…"):
+                    result = analyze_with_backend(image_bytes, image_filename, api_url)
+                st.session_state.sonic_result = {
+                    "image_hash": hashlib.sha256(image_bytes).hexdigest(),
+                    "api_url": api_url,
+                    "data": result,
+                }
+            except BackendError as exc:
+                st.session_state.pop("sonic_result", None)
+                st.error(str(exc))
+
+        saved = st.session_state.get("sonic_result")
+        matching_image = (
+            saved is not None
+            and saved.get("image_hash") == hashlib.sha256(image_bytes).hexdigest()
+            and saved.get("api_url") == api_url
+        )
+        if matching_image:
+            analysis = saved["data"]
+            st.header(analysis["scene"])
+            st.write(analysis["description"])
+            for name in SCORE_NAMES:
+                score = float(analysis["scores"][name])
+                st.progress(score, text=f"{name.title()}: {score:.2f}")
+                st.caption(analysis["explanations"][name])
+            with st.expander("Raw VisualAnalysis JSON (for music integration)"):
+                st.json(analysis)
+            st.download_button(
+                "Download analysis as JSON",
+                data=json.dumps(analysis, indent=2),
+                file_name="sonic-postcodes-analysis.json",
+                mime="application/json",
+            )
+            st.info("The music-generation stream can use these five scores. Audio playback is not connected here yet.")
+        elif "sonic_result" not in st.session_state:
+            st.info("Click 'Analyse photograph' to send the image to POST /api/analyze.")
+        else:
+            st.info("Click 'Analyse photograph' to analyse the newly selected picture.")
+
+else:
+    # Preserve the teammate's original Echoframe feature-explorer as a separate mode.
+    res = get_result(image_bytes, key)
+    if res.get("warn"):
+        st.warning(res["warn"])
+    left, right = st.columns([3, 2], gap="large")
+    with left:
+        st.image(draw_pins(load(image_bytes), res["feats"]), use_container_width=True)
+    with right:
+        st.caption("Identified by Claude" if res["src"] == "ai" else "On-device colour/shape estimate")
+        st.header(res["env"])
+        st.write(res["why"])
+        meta = ", ".join(x for x in [res["time"], res["weather"]] if x)
+        if meta:
+            st.caption(meta)
+        st.subheader("What it found")
+        for feature in res["feats"]:
+            where = ("left" if feature["x"] < .34 else
+                     "right" if feature["x"] > .66 else "centre")
+            coverage = f", {feature['pct']}% of the frame" if feature["pct"] else ""
+            st.markdown(f"**{feature['label']}**  \n{where}{coverage}")
+        if res["src"] != "ai":
+            st.caption("This is a rough local image heuristic, not live AI analysis.")

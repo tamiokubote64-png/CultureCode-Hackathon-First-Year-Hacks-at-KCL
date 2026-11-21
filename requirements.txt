@@ -1,0 +1,6 @@
+# Install everything for the integrated Streamlit UI and FastAPI backend.
+-r backend/requirements.txt
+streamlit>=1.40,<2
+numpy>=1.26,<3
+requests>=2.31,<3
+anthropic>=0.40,<1
