@@ -4,7 +4,7 @@ Upload a city or street image, receive five grounded visual scores from a Python
 
 ## Description 
 
-The application relies on the user uploading an image of an environment (eg. coast, countryside , city...). After the user uploads this, the image is studied and analysed from which a soundtrack is created to represent the environment almost as if the person receiving the postcard was there themselves. A claude API is called to analyse the image in order to analyse it.
+The application relies on the user uploading an image of an environment (eg. coast, countryside , city...). After the user uploads this, the image is studied and analysed from which a soundtrack is created to represent the environment almost as if the person receiving the postcard was there themselves. 
 
 ## Run locally (Windows PowerShell)
 
